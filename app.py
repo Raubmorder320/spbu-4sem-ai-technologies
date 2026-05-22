@@ -14,12 +14,9 @@ def load_artifacts():
 
 model, scaler = load_artifacts()
 
-# курс берем условный
-EUR_TO_RUB = 82.54  
 
 st.set_page_config(page_title="Аналитика оттока", page_icon="🏦")
 st.title("🏦 Модуль прогнозирования оттока клиентов")
-st.markdown("*Адаптировано для филиалов в Европе (Франция, Германия, Испания)*")
 
 col1, col2 = st.columns(2)
 
@@ -27,14 +24,13 @@ with col1:
     geography = st.selectbox("Филиал обслуживания", ["Франция", "Испания", "Германия"])
     gender = st.selectbox("Пол клиента", ["Мужской", "Женский"])
     age = st.slider("Возраст клиента", 18, 100, 35)
-    # адаптация кредитного скоринга: в Европе обычно FICO, в России ПКР, но для модели это просто числовой показатель от 300 до 850
-    credit_score = st.slider("Кредитный скоринг (FICO/ПКР)", 300, 850, 600)
+    credit_score = st.slider("Кредитный рейтинг", 300, 850, 600)
     tenure = st.slider("Сколько лет с банком", 0, 10, 5)
 
 with col2:
     # ввод в рублях
-    balance_rub = st.number_input("Баланс на счету (Руб)", min_value=0, value=1500000, step=100000)
-    salary_rub = st.number_input("Оценочный годовой доход (Руб)", min_value=0, value=1200000, step=100000)
+    balance = st.number_input("Баланс на счету, $", min_value=0, value=15000, step=1000)
+    salary = st.number_input("Оценочный годовой доход, $", min_value=0, value=12000, step=1000)
     
     num_products = st.selectbox("Количество активных продуктов", [1, 2, 3, 4])
     has_cr_card = st.checkbox("Наличие кредитной карты", value=True)
@@ -49,10 +45,7 @@ if st.button("📊 Сгенерировать прогноз", use_container_wid
     
     geography_eng = geo_dict[geography]
     gender_eng = gender_dict[gender]
-    
-    # 2. Конвертируем рубли обратно в евро для модели
-    balance_eur = balance_rub / EUR_TO_RUB
-    salary_eur = salary_rub / EUR_TO_RUB
+
 
     # 3. Ручное кодирование категорий (One-Hot)
     geo_germany = 1 if geography_eng == 'Germany' else 0
@@ -64,11 +57,11 @@ if st.button("📊 Сгенерировать прогноз", use_container_wid
         'CreditScore': [credit_score],
         'Age': [age],
         'Tenure': [tenure],
-        'Balance': [balance_eur],        # <--- Отдаем конвертированный баланс
+        'Balance': [balance], 
         'NumOfProducts': [num_products],
         'HasCrCard': [1 if has_cr_card else 0],
         'IsActiveMember': [1 if is_active else 0],
-        'EstimatedSalary': [salary_eur], # <--- Отдаем конвертированную зарплату
+        'EstimatedSalary': [salary], 
         'Geography_Germany': [geo_germany],
         'Geography_Spain': [geo_spain],
         'Gender_Male': [gender_male]
