@@ -1,66 +1,88 @@
 import streamlit as st
 import pandas as pd
-import random
-# import pickle # Раскомментируй завтра, когда будет реальная модель
+import pickle
+from catboost import CatBoostClassifier
 
-# Настройка страницы
-st.set_page_config(page_title="Bank Churn Predictor", page_icon="🏦", layout="centered")
+# загрузка модели
+@st.cache_resource
+def load_artifacts():
+    model = CatBoostClassifier()
+    model.load_model('catboost_best_model.cbm')
+    with open('scaler.pkl', 'rb') as f:
+        scaler = pickle.load(f)
+    return model, scaler
 
-st.title("🏦 Предсказание оттока клиентов банка")
-st.write("Введите данные клиента, чтобы узнать, какова вероятность его ухода.")
+model, scaler = load_artifacts()
 
-# Создаем две колонки для красоты
+# курс берем условный
+EUR_TO_RUB = 82.54  
+
+st.set_page_config(page_title="Аналитика оттока", page_icon="🏦")
+st.title("🏦 Модуль прогнозирования оттока клиентов")
+st.markdown("*Адаптировано для филиалов в Европе (Франция, Германия, Испания)*")
+
 col1, col2 = st.columns(2)
 
 with col1:
-    geography = st.selectbox("Страна", ["France", "Spain", "Germany"])
-    gender = st.selectbox("Пол", ["Male", "Female"])
-    age = st.slider("Возраст", 18, 100, 35)
-    credit_score = st.slider("Кредитный рейтинг", 300, 850, 600)
-    tenure = st.slider("Лет с банком", 0, 10, 5)
+    geography = st.selectbox("Филиал обслуживания", ["Франция", "Испания", "Германия"])
+    gender = st.selectbox("Пол клиента", ["Мужской", "Женский"])
+    age = st.slider("Возраст клиента", 18, 100, 35)
+    # адаптация кредитного скоринга: в Европе обычно FICO, в России ПКР, но для модели это просто числовой показатель от 300 до 850
+    credit_score = st.slider("Кредитный скоринг (FICO/ПКР)", 300, 850, 600)
+    tenure = st.slider("Сколько лет с банком", 0, 10, 5)
 
 with col2:
-    balance = st.number_input("Баланс на счету, $", min_value=0.0, value=50000.0, step=1000.0)
-    salary = st.number_input("Примерная зарплата, $", min_value=0.0, value=60000.0, step=1000.0)
-    num_products = st.selectbox("Количество продуктов банка", [1, 2, 3, 4])
-    has_cr_card = st.checkbox("Есть кредитная карта?", value=True)
-    is_active = st.checkbox("Активный клиент?", value=True)
-
-# Кнопка для предсказания
-if st.button("🔮 Предсказать отток", use_container_width=True):
+    # ввод в рублях
+    balance_rub = st.number_input("Баланс на счету (Руб)", min_value=0, value=1500000, step=100000)
+    salary_rub = st.number_input("Оценочный годовой доход (Руб)", min_value=0, value=1200000, step=100000)
     
-    # 1. Собираем данные с экрана в табличку (DataFrame)
-    # Важно: названия колонок должны ТОЧНО совпадать с теми, на которых друг обучал модель
-    input_data = pd.DataFrame({
-        "CreditScore": [credit_score],
-        "Geography": [geography],
-        "Gender": [gender],
-        "Age": [age],
-        "Tenure": [tenure],
-        "Balance": [balance],
-        "NumOfProducts": [num_products],
-        "HasCrCard": [1 if has_cr_card else 0],
-        "IsActiveMember": [1 if is_active else 0],
-        "EstimatedSalary": [salary]
+    num_products = st.selectbox("Количество активных продуктов", [1, 2, 3, 4])
+    has_cr_card = st.checkbox("Наличие кредитной карты", value=True)
+    is_active = st.checkbox("Активный клиент (транзакции за месяц)", value=True)
+
+if st.button("📊 Сгенерировать прогноз", use_container_width=True):
+    
+    # === ПОДКАПОТНАЯ КОНВЕРТАЦИЯ ДЛЯ МОДЕЛИ ===
+    # 1. Возвращаем странам и полу оригинальные названия, которые знает модель
+    geo_dict = {"Франция": "France", "Испания": "Spain", "Германия": "Germany"}
+    gender_dict = {"Мужской": "Male", "Женский": "Female"}
+    
+    geography_eng = geo_dict[geography]
+    gender_eng = gender_dict[gender]
+    
+    # 2. Конвертируем рубли обратно в евро для модели
+    balance_eur = balance_rub / EUR_TO_RUB
+    salary_eur = salary_rub / EUR_TO_RUB
+
+    # 3. Ручное кодирование категорий (One-Hot)
+    geo_germany = 1 if geography_eng == 'Germany' else 0
+    geo_spain = 1 if geography_eng == 'Spain' else 0
+    gender_male = 1 if gender_eng == 'Male' else 0
+    
+    # 4. Собираем DataFrame
+    input_df = pd.DataFrame({
+        'CreditScore': [credit_score],
+        'Age': [age],
+        'Tenure': [tenure],
+        'Balance': [balance_eur],        # <--- Отдаем конвертированный баланс
+        'NumOfProducts': [num_products],
+        'HasCrCard': [1 if has_cr_card else 0],
+        'IsActiveMember': [1 if is_active else 0],
+        'EstimatedSalary': [salary_eur], # <--- Отдаем конвертированную зарплату
+        'Geography_Germany': [geo_germany],
+        'Geography_Spain': [geo_spain],
+        'Gender_Male': [gender_male]
     })
     
-    st.write("Данные отправлены в модель:")
-    st.dataframe(input_data)
-
-    # 2. ЗАГЛУШКА ДЛЯ ТЕСТИРОВАНИЯ (пока нет реальной модели)
-    # Завтра удали эти 3 строчки:
-    churn_probability = random.uniform(0, 1)
-    prediction = 1 if churn_probability > 0.5 else 0
+    # 5. Масштабирование и предсказание
+    numeric_cols = ['CreditScore', 'Age', 'Tenure', 'Balance', 'NumOfProducts', 'EstimatedSalary']
+    input_df[numeric_cols] = scaler.transform(input_df[numeric_cols])
     
-    # 3. РЕАЛЬНЫЙ КОД (Раскомментируй завтра)
-    # with open('model.pkl', 'rb') as file:
-    #     model = pickle.load(file)
-    # prediction = model.predict(input_data)[0]
-    # churn_probability = model.predict_proba(input_data)[0][1]
-
-    # 4. Вывод результата
+    prediction = model.predict(input_df)[0]
+    probability = model.predict_proba(input_df)[0][1]
+    
     st.markdown("---")
     if prediction == 1:
-        st.error(f"⚠️ ОПАСНОСТЬ! Клиент скорее всего **УЙДЕТ**. Вероятность оттока: {churn_probability:.1%}")
+        st.error(f"🔴 **ВНИМАНИЕ: Высокий риск оттока.** \n\nВероятность: **{probability:.1%}**. Рекомендуется предложить клиенту льготные условия по кредитной карте или депозит с повышенной ставкой.")
     else:
-        st.success(f"✅ ВСЕ ХОРОШО! Клиент **ОСТАНЕТСЯ**. Вероятность оттока: {churn_probability:.1%}")
+        st.success(f"🟢 **Стабильный клиент.** \n\nВероятность оттока: **{probability:.1%}**. Показатели в норме.")
