@@ -37,9 +37,7 @@ with col2:
     is_active = st.checkbox("Активный клиент (транзакции за месяц)", value=True)
 
 if st.button("📊 Сгенерировать прогноз", use_container_width=True):
-    
-    # === ПОДКАПОТНАЯ КОНВЕРТАЦИЯ ДЛЯ МОДЕЛИ ===
-    # 1. Возвращаем странам и полу оригинальные названия, которые знает модель
+
     geo_dict = {"Франция": "France", "Испания": "Spain", "Германия": "Germany"}
     gender_dict = {"Мужской": "Male", "Женский": "Female"}
     
@@ -47,12 +45,10 @@ if st.button("📊 Сгенерировать прогноз", use_container_wid
     gender_eng = gender_dict[gender]
 
 
-    # 3. Ручное кодирование категорий (One-Hot)
     geo_germany = 1 if geography_eng == 'Germany' else 0
     geo_spain = 1 if geography_eng == 'Spain' else 0
     gender_male = 1 if gender_eng == 'Male' else 0
     
-    # 4. Собираем DataFrame
     input_df = pd.DataFrame({
         'CreditScore': [credit_score],
         'Age': [age],
@@ -67,7 +63,6 @@ if st.button("📊 Сгенерировать прогноз", use_container_wid
         'Gender_Male': [gender_male]
     })
     
-    # 5. Масштабирование и предсказание
     numeric_cols = ['CreditScore', 'Age', 'Tenure', 'Balance', 'NumOfProducts', 'EstimatedSalary']
     input_df[numeric_cols] = scaler.transform(input_df[numeric_cols])
     
